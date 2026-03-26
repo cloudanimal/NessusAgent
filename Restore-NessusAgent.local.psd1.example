@@ -1,0 +1,10 @@
+@{
+    NessusServer = 'sensor.cloud.tenable.com:443'
+    WorkingDirectory = 'C:\Temp'
+    LogPath = 'C:\Temp\agent_install.log'
+    NessusKey = 'replace-with-nessus-linking-key'
+    CustomerUuid = 'replace-with-customer-uuid'
+    InstallerSearchPaths = @(
+        '\\fs\share\vmops'
+    )
+}

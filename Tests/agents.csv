@@ -1,0 +1,4 @@
+Agent Name,Status,IP Address,Platform,Profile Name,Profile UUID,Groups,Group IDs,Version,Last Plugin Update,Agent ID,Agent UUID,Linked On,Last Connect,Last Scanned
+SERVER01,Online,192.0.2.10,Windows,Default,11111111-1111-1111-1111-111111111111,Windows Servers,1001,11.1.2,2026-03-20 09:15:42,2001,aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,2026-03-01 10:00:00,2026-03-20 09:15:42,2026-03-19 23:48:10
+SERVER02,Online,192.0.2.11,Windows,Default,22222222-2222-2222-2222-222222222222,DMZ Servers,1002,11.1.2,2026-03-20 09:15:42,2002,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb,2026-03-01 10:05:00,2026-03-20 08:00:00,2026-03-19 22:00:00
+SERVER03,Offline,192.0.2.12,Windows,Default,33333333-3333-3333-3333-333333333333,,1003,11.1.2,2026-03-18 09:15:42,2003,cccccccc-cccc-cccc-cccc-cccccccccccc,2026-03-01 10:10:00,2026-03-18 08:00:00,2026-03-15 22:00:00
