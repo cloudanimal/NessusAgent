@@ -8,11 +8,14 @@ Describe 'Restore-NessusAgent harness' {
         Import-Module $moduleManifestPath -Force
     }
 
-    It 'does not expose AcceptEula on public install and deployment commands' {
+    It 'does not expose AcceptEula on public install and repair commands' {
         (Get-Command Get-NessusAgentInstaller).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
         (Get-Command Install-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
-        (Get-Command Invoke-NessusAgentDeployment).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
         (Get-Command Restore-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+    }
+
+    It 'does not export Invoke-NessusAgentDeployment from the module' {
+        Get-Command Invoke-NessusAgentDeployment -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
     }
 
     It 'reports no change for a healthy agent' {

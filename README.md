@@ -20,7 +20,7 @@ PowerShell module and operator script for checking, repairing, reinstalling, and
 ## Requirements
 
 - Windows PowerShell 5.1 or PowerShell 7+
-- Tenable Nessus Agent CLI available at the default path, or passed with `-NessusCliPath`
+- Tenable Nessus Agent CLI available at the default path, or passed with `-NessusCliPath`, unless you are using the install flow to lay the agent down first
 - A valid Nessus linking key when using relink flows
 
 ## Configuration
@@ -49,8 +49,10 @@ Import the module directly:
 
 ```powershell
 Import-Module .\Restore-NessusAgent.psd1 -Force
-Invoke-NessusAgentDeployment -Relink -CsvPath .\Tests\agents.csv
+Restore-NessusAgent -Relink -CsvPath .\Tests\agents.csv
 ```
+
+That example assumes the Nessus linking key is already configured through `REPAIR_NESSUS_AGENT_KEY` or `Restore-NessusAgent.local.psd1`.
 
 Run the operator script:
 

@@ -19,6 +19,5 @@ Export-ModuleMember -Function @(
     'Get-NessusAgentStatus',
     'Get-NessusAgentConfiguration',
     'Install-NessusAgent',
-    'Invoke-NessusAgentDeployment',
     'Restore-NessusAgent'
 )

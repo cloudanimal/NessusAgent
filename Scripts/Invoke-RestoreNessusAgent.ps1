@@ -179,8 +179,8 @@ Set one of these before running with -Relink:
         }
     }
 
-    $deploymentParams = @{
-        NessusCliPath = $NessusCliPath
+    $restoreParams = @{
+        Path = $NessusCliPath
         Relink = $Relink
         LinkingKey = $effectiveLinkingKey
         TargetHost = $linkTargetHost
@@ -195,60 +195,65 @@ Set one of these before running with -Relink:
     }
 
     if ($PSBoundParameters.ContainsKey('Group')) {
-        $deploymentParams.GroupName = $Group
+        $restoreParams.GroupName = $Group
     }
     else {
-        $deploymentParams.GroupOverride = $GroupOverride
+        $restoreParams.GroupOverride = $GroupOverride
     }
 
     if ($PSBoundParameters.ContainsKey('CsvPath')) {
-        $deploymentParams.CsvPath = $CsvPath
+        $restoreParams.CsvPath = $CsvPath
     }
 
     if ($PSBoundParameters.ContainsKey('MsiPath')) {
-        $deploymentParams.MsiPath = $MsiPath
+        $restoreParams.MsiPath = $MsiPath
     }
 
     if ($PSBoundParameters.ContainsKey('Version')) {
-        $deploymentParams.Version = $Version
+        $restoreParams.Version = $Version
     }
 
-    $result = Invoke-NessusAgentDeployment @deploymentParams
+    $result = Restore-NessusAgent @restoreParams
 
     $linkAction = $null
-    if ($result.RepairResult -and $result.RepairResult.Actions) {
-        $linkAction = $result.RepairResult.Actions | Where-Object { $_.Action -eq 'LinkAgent' } | Select-Object -First 1
+    if ($result.Actions) {
+        $linkAction = $result.Actions | Where-Object { $_.Action -eq 'LinkAgent' } | Select-Object -First 1
     }
+
+    $agentInstalled = (Test-Path -LiteralPath $NessusCliPath) -or [bool]($result.InstallResult -and $result.InstallResult.Installed)
 
     $flatResult = [pscustomobject]@{
         ComputerName = $resolvedComputerName
         AgentName = $resolvedAgentName
-        Installed = $result.Installed
-        Changed = if ($result.RepairResult) { $result.RepairResult.Changed } else { $null }
-        Outcome = if ($result.RepairResult) {
-            if ($result.RepairResult.Changed) { 'Changed' } else { 'NoChange' }
+        Installed = $agentInstalled
+        Changed = $result.Changed
+        Outcome = if ($result.InstallResult -and $result.InstallResult.Installed -and -not $result.After) {
+            'Installed'
         }
-        elseif ($result.InstallResult) {
-            if ($result.InstallResult.Installed) { 'Installed' } else { 'InstallPending' }
+        elseif ($result.InstallResult -and -not $result.InstallResult.Installed -and -not $result.After) {
+            'InstallPending'
+        }
+        elseif ($result.Changed) {
+            'Changed'
         }
         else {
-            'Observed'
+            'NoChange'
         }
-        ActionTaken = if ($result.RepairResult -and $result.RepairResult.Actions) {
-            (($result.RepairResult.Actions | ForEach-Object { $_.Action }) -join '; ')
+        ActionTaken = if ($result.Actions) {
+            (($result.Actions | ForEach-Object { $_.Action }) -join '; ')
         }
         else {
             $null
         }
-        Summary = $result.Summary
-        BeforeStatus = if ($result.RepairResult -and $result.RepairResult.Before) { $result.RepairResult.Before.OverallStatus } else { $null }
-        AfterStatus = if ($result.RepairResult -and $result.RepairResult.After) { $result.RepairResult.After.OverallStatus } else { $null }
-        LinkedHost = if ($result.Health) { $result.Health.LinkedHost } else { $null }
-        ExpectedHost = if ($result.Health) { $result.Health.ExpectedHost } else { $null }
+        Summary = $result.DetailedResult
+        BeforeStatus = if ($result.Before) { $result.Before.OverallStatus } else { $null }
+        AfterStatus = if ($result.After) { $result.After.OverallStatus } else { $null }
+        LinkedHost = if ($result.After) { $result.After.LinkedHost } else { $null }
+        ExpectedHost = if ($result.After) { $result.After.ExpectedHost } else { $null }
         Group = if ($linkAction) { $linkAction.Group } else { $null }
         GroupSource = if ($linkAction) { $linkAction.GroupSource } else { $null }
-        LocalLogPath = $result.LocalLogPath
-        RemoteLogPath = $result.RemoteLogPath
+        LocalLogPath = if ($result.Log) { $result.Log.LocalLogPath } else { $null }
+        RemoteLogPath = if ($result.Log) { $result.Log.RemoteLogPath } else { $null }
     }
 
     Write-FormattedResult -FlatResult $flatResult -OutputMode $outputMode
