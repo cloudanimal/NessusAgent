@@ -20,9 +20,6 @@ param(
     [string]$Version,
 
     [Parameter()]
-    [switch]$AcceptEula,
-
-    [Parameter()]
     [switch]$Relink = $true,
 
     [Parameter()]
@@ -184,7 +181,6 @@ Set one of these before running with -Relink:
 
     $deploymentParams = @{
         NessusCliPath = $NessusCliPath
-        AcceptEula = $AcceptEula
         Relink = $Relink
         LinkingKey = $effectiveLinkingKey
         TargetHost = $linkTargetHost

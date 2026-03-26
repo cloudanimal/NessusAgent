@@ -2,6 +2,12 @@ $moduleRoot = Split-Path -Parent $PSScriptRoot
 $localConfigPath = Join-Path -Path $moduleRoot -ChildPath 'Restore-NessusAgent.local.psd1'
 
 $defaultWorkingDirectory = if ($env:OS -eq 'Windows_NT') { 'C:\Temp' } else { [System.IO.Path]::GetTempPath().TrimEnd('\', '/') }
+$defaultLogPath = if ($defaultWorkingDirectory -match '^[A-Za-z]:\\') {
+    '{0}\agent_install.log' -f $defaultWorkingDirectory.TrimEnd('\')
+}
+else {
+    Join-Path -Path $defaultWorkingDirectory -ChildPath 'agent_install.log'
+}
 
 $script:RestoreNessusAgentConfig = [ordered]@{
     AgentDetailsEndpoint = 'https://www.tenable.com/downloads/api/v1/public/pages/nessus-agents'
@@ -9,7 +15,7 @@ $script:RestoreNessusAgentConfig = [ordered]@{
     TenableEulaUrl = 'https://cloud.tenable.com/print-eula.html'
     NessusServer = 'sensor.cloud.tenable.com:443'
     WorkingDirectory = $defaultWorkingDirectory
-    LogPath = (Join-Path -Path $defaultWorkingDirectory -ChildPath 'agent_install.log')
+    LogPath = $defaultLogPath
     NessusKey = $null
     CustomerUuid = $null
     InstallerSearchPaths = @(

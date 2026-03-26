@@ -172,9 +172,6 @@ function Restore-NessusAgent {
         [string]$InstallLogPath,
 
         [Parameter()]
-        [switch]$AcceptEula,
-
-        [Parameter()]
         [string]$ServiceName = 'Tenable Nessus Agent',
 
         [Parameter()]
@@ -296,15 +293,13 @@ function Restore-NessusAgent {
         $shouldAttemptInstall = (-not $PSBoundParameters.ContainsKey('InputObject')) -and (-not $pathExists) -and (
             ($env:OS -eq 'Windows_NT') -or
             $PSBoundParameters.ContainsKey('MsiPath') -or
-            $PSBoundParameters.ContainsKey('Version') -or
-            $AcceptEula
+            $PSBoundParameters.ContainsKey('Version')
         )
 
         if ($shouldAttemptInstall) {
             $installParams = @{
                 DownloadPath = $DownloadPath
                 LogPath = $InstallLogPath
-                AcceptEula = $AcceptEula
                 WhatIf = $WhatIfPreference
                 Confirm = $false
             }

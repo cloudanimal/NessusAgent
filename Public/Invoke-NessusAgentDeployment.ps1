@@ -18,9 +18,6 @@ function Invoke-NessusAgentDeployment {
         [string]$InstallLogPath = (Get-NessusAgentInstallLogPath),
 
         [Parameter()]
-        [switch]$AcceptEula,
-
-        [Parameter()]
         [string]$ServiceName = 'Tenable Nessus Agent',
 
         [Parameter()]
@@ -76,7 +73,6 @@ function Invoke-NessusAgentDeployment {
         $installParams = @{
             DownloadPath = $DownloadPath
             LogPath = $InstallLogPath
-            AcceptEula = $AcceptEula
             WhatIf = $WhatIfPreference
             Confirm = $false
         }

@@ -49,32 +49,32 @@ Import the module directly:
 
 ```powershell
 Import-Module .\Restore-NessusAgent.psd1 -Force
-Invoke-NessusAgentDeployment -Relink -AcceptEula -CsvPath .\Tests\agents.csv
+Invoke-NessusAgentDeployment -Relink -CsvPath .\Tests\agents.csv
 ```
 
 Run the operator script:
 
 ```powershell
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -CsvPath .\agents.csv -AcceptEula -Key '<manageengine-passed-key>'
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -CsvPath .\agents.csv -Key '<manageengine-passed-key>'
 ```
 
 Pass the destination group directly when your deployment system already knows it:
 
 ```powershell
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -AcceptEula -Key '<manageengine-passed-key>' -Group 'Windows Servers'
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers'
 ```
 
 ManageEngine-style JSON output:
 
 ```powershell
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -AcceptEula -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Json
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Json
 ```
 
 Other flat output formats:
 
 ```powershell
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -AcceptEula -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Csv
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -AcceptEula -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Tab
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Csv
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Tab
 ```
 
 The flat output includes:

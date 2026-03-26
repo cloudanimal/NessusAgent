@@ -12,10 +12,7 @@ function Install-NessusAgent {
         [string]$Version,
 
         [Parameter()]
-        [string]$LogPath = (Get-NessusAgentInstallLogPath),
-
-        [Parameter()]
-        [switch]$AcceptEula
+        [string]$LogPath = (Get-NessusAgentInstallLogPath)
     )
 
     $isWindowsPlatform = $env:OS -eq 'Windows_NT'
@@ -24,7 +21,6 @@ function Install-NessusAgent {
     if (-not $PSBoundParameters.ContainsKey('MsiPath')) {
         $downloadParams = @{
             Path = $DownloadPath
-            AcceptEula = $AcceptEula
         }
 
         if ($PSBoundParameters.ContainsKey('Version')) {

@@ -4,6 +4,15 @@ Describe 'Restore-NessusAgent harness' {
         $script:HarnessOutput = (& $harnessPath | Out-String)
         $tagHarnessPath = Join-Path $PSScriptRoot 'Invoke-RestoreNessusAgentTagHarness.ps1'
         $script:TagHarnessOutput = (& $tagHarnessPath | Out-String)
+        $moduleManifestPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Restore-NessusAgent.psd1'
+        Import-Module $moduleManifestPath -Force
+    }
+
+    It 'does not expose AcceptEula on public install and deployment commands' {
+        (Get-Command Get-NessusAgentInstaller).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+        (Get-Command Install-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+        (Get-Command Invoke-NessusAgentDeployment).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+        (Get-Command Restore-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
     }
 
     It 'reports no change for a healthy agent' {

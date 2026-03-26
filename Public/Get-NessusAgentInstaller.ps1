@@ -12,15 +12,8 @@ function Get-NessusAgentInstaller {
         [string]$Version,
 
         [Parameter()]
-        [switch]$AcceptEula,
-
-        [Parameter()]
         [string[]]$SearchPath = $script:RestoreNessusAgentConfig.InstallerSearchPaths
     )
-
-    if (-not $AcceptEula) {
-        throw "Get-NessusAgentInstaller requires -AcceptEula. Review Tenable's license agreement at $($script:RestoreNessusAgentConfig.TenableEulaUrl)."
-    }
 
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
