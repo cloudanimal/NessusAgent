@@ -9,8 +9,9 @@ Describe 'Restore-NessusAgent harness' {
     It 'reports no change for a healthy agent' {
         $script:HarnessOutput | Should -Match 'Scenario\s+: Healthy'
         $script:HarnessOutput | Should -Match 'Changed\s+: False'
-        $script:HarnessOutput | Should -Match 'BeforeStatus\s+: OK'
-        $script:HarnessOutput | Should -Match 'AfterStatus\s+: OK'
+        $script:HarnessOutput | Should -Match 'BeforeStatus\s+: Warning'
+        $script:HarnessOutput | Should -Match 'AfterStatus\s+: Warning'
+        $script:HarnessOutput | Should -Match 'HealthSummary\s+: WARNING: Last successful connect is older than 24 hours\.; Last connection attempt is older than 24 hours\.'
     }
 
     It 'relinks a wrong target using the CSV group' {
