@@ -113,3 +113,7 @@ pwsh -File .\Tests\Invoke-RestoreNessusAgentPester.ps1
 ```
 
 GitHub Actions is configured to run the Pester suite on pushes to `main` and on pull requests.
+
+## License
+
+This project is licensed under the MIT License. See `LICENSE` for details.
