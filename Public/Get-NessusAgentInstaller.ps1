@@ -12,6 +12,9 @@ function Get-NessusAgentInstaller {
         [string]$Version,
 
         [Parameter()]
+        [switch]$ForceDownload,
+
+        [Parameter()]
         [string[]]$SearchPath = $script:RestoreNessusAgentConfig.InstallerSearchPaths
     )
 
@@ -30,9 +33,13 @@ function Get-NessusAgentInstaller {
     $epcDistributionShare = $null
     if ($isWindowsPlatform) {
         try {
-            $epcDistributionServer = Get-EpcDistributionServer
-            if ($epcDistributionServer -and $epcDistributionServer.ServerName) {
-                $epcDistributionShare = "\\$($epcDistributionServer.ServerName)\tenable\agent"
+            $epcDistributionServer = Get-MeDistributionServer
+            if ($epcDistributionServer -and $epcDistributionServer.DistributionServerName) {
+                $epcDistributionShare = "c:\SCPM\LOGS\Tenable"
+                if (-not (Test-Path -LiteralPath $epcDistributionShare)) {
+                    New-Item -ItemType Directory -Path $epcDistributionShare -Force | Out-Null
+                }
+                # Simulate share as \\aigi-pwvmeds001\logs\Tenable
             }
         }
         catch {
@@ -66,7 +73,7 @@ function Get-NessusAgentInstaller {
         $destination = Join-Path -Path $Path -ChildPath $internalInstaller.FileName
         $downloaded = $false
 
-        if (-not (Test-Path -LiteralPath $destination)) {
+        if ($ForceDownload -or (-not (Test-Path -LiteralPath $destination))) {
             if ($PSCmdlet.ShouldProcess($destination, "Copy Nessus Agent from $($internalInstaller.FullName)")) {
                 Copy-Item -LiteralPath $internalInstaller.FullName -Destination $destination -Force
                 $downloaded = $true
@@ -101,7 +108,7 @@ function Get-NessusAgentInstaller {
     $downloaded = $false
     $hashValidated = $false
 
-    if (-not (Test-Path -LiteralPath $destination)) {
+    if ($ForceDownload -or (-not (Test-Path -LiteralPath $destination))) {
         if ($PSCmdlet.ShouldProcess($destination, "Download Nessus Agent from $($downloadInfo.Uri)")) {
             $previousProgressPreference = $ProgressPreference
             try {

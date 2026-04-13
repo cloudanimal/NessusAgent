@@ -7,16 +7,19 @@
     Copyright = '(c) OpenAI. All rights reserved.'
     PowerShellVersion = '5.1'
     FunctionsToExport = @(
-        'Get-EpcDistributionServer',
+        'Get-MeDistributionServer',
         'Get-NessusAgentHealth',
         'Get-NessusAgentInstaller',
         'Get-EpcRegistry',
         'Get-NessusAgentStatus',
         'Get-NessusAgentConfiguration',
         'Install-NessusAgent',
+        'Uninstall-NessusAgent',
         'Restore-NessusAgent'
     )
     CmdletsToExport = @()
     VariablesToExport = @()
-    AliasesToExport = @()
+    AliasesToExport = @(
+        'Get-MEDS'
+    )
 }

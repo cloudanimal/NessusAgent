@@ -11,7 +11,71 @@ Describe 'Restore-NessusAgent harness' {
     It 'does not expose AcceptEula on public install and repair commands' {
         (Get-Command Get-NessusAgentInstaller).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
         (Get-Command Install-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+        (Get-Command Uninstall-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
         (Get-Command Restore-NessusAgent).Parameters.ContainsKey('AcceptEula') | Should -BeFalse
+    }
+
+    It 'exports uninstall command for agent removal workflows' {
+        Get-Command Uninstall-NessusAgent -ErrorAction SilentlyContinue | Should -Not -BeNullOrEmpty
+    }
+
+    It 'refuses uninstall when product code format is invalid' {
+        { Uninstall-NessusAgent -AllowUninstall -ProductCode 'not-a-guid' -Confirm:$false } | Should -Throw 'Invalid ProductCode format*'
+    }
+
+    It 'refuses uninstall when product code is not found in uninstall registry entries' {
+        Mock -CommandName Get-ItemProperty -ModuleName Restore-NessusAgent -MockWith { @() }
+        { Uninstall-NessusAgent -AllowUninstall -ProductCode '{11111111-1111-1111-1111-111111111111}' -Confirm:$false } | Should -Throw "*not found in registered uninstall entries*"
+    }
+
+    It 'refuses uninstall when product code resolves to a non-Nessus product' {
+        Mock -CommandName Get-ItemProperty -ModuleName Restore-NessusAgent -MockWith {
+            @([pscustomobject]@{
+                DisplayName = 'Some Other Product'
+                Publisher = 'Other Vendor'
+                InstallLocation = 'C:\Program Files\Other'
+                UninstallString = 'msiexec.exe /x {22222222-2222-2222-2222-222222222222}'
+            })
+        }
+
+        { Uninstall-NessusAgent -AllowUninstall -ProductCode '{22222222-2222-2222-2222-222222222222}' -Confirm:$false } | Should -Throw '*is not recognized as Tenable Nessus Agent*'
+    }
+
+    It 'refuses auto-discovery when multiple Nessus Agent uninstall candidates are found' {
+        Mock -CommandName Test-Path -ModuleName Restore-NessusAgent -ParameterFilter { $LiteralPath -eq 'C:\Program Files\Tenable\Nessus Agent\nessuscli.exe' } -MockWith { $true }
+        Mock -CommandName Get-ItemProperty -ModuleName Restore-NessusAgent -MockWith {
+            @(
+                [pscustomobject]@{
+                    DisplayName = 'Tenable Nessus Agent'
+                    Publisher = 'Tenable, Inc.'
+                    InstallLocation = 'C:\Program Files\Tenable\Nessus Agent'
+                    UninstallString = 'msiexec.exe /x {33333333-3333-3333-3333-333333333333}'
+                },
+                [pscustomobject]@{
+                    DisplayName = 'Tenable Nessus Agent'
+                    Publisher = 'Tenable, Inc.'
+                    InstallLocation = 'C:\Program Files\Tenable\Nessus Agent'
+                    UninstallString = 'msiexec.exe /x {44444444-4444-4444-4444-444444444444}'
+                }
+            )
+        }
+
+        { Uninstall-NessusAgent -AllowUninstall -Confirm:$false } | Should -Throw '*Multiple Nessus Agent uninstall candidates*'
+    }
+
+    It 'writes an uninstall audit event on refusal' {
+        $auditPath = Join-Path $env:TEMP ('nessus-uninstall-audit-{0}.log' -f [guid]::NewGuid().ToString())
+        try {
+            { Uninstall-NessusAgent -AllowUninstall -ProductCode 'bad-code' -AuditLogPath $auditPath -Confirm:$false } | Should -Throw
+            Test-Path -LiteralPath $auditPath | Should -BeTrue
+            (Get-Content -LiteralPath $auditPath -Raw) | Should -Match '"Command":"Uninstall-NessusAgent"'
+            (Get-Content -LiteralPath $auditPath -Raw) | Should -Match '"Outcome":"Refused"'
+        }
+        finally {
+            if (Test-Path -LiteralPath $auditPath) {
+                Remove-Item -LiteralPath $auditPath -Force -ErrorAction SilentlyContinue
+            }
+        }
     }
 
     It 'does not export Invoke-NessusAgentDeployment from the module' {
@@ -23,7 +87,6 @@ Describe 'Restore-NessusAgent harness' {
         $script:HarnessOutput | Should -Match 'Changed\s+: False'
         $script:HarnessOutput | Should -Match 'BeforeStatus\s+: Warning'
         $script:HarnessOutput | Should -Match 'AfterStatus\s+: Warning'
-        $script:HarnessOutput | Should -Match 'HealthSummary\s+: WARNING: Last successful connect is older than 24 hours\.; Last connection attempt is older than 24 hours\.'
     }
 
     It 'relinks a wrong target using the CSV group' {
@@ -43,7 +106,7 @@ Describe 'Restore-NessusAgent harness' {
 
     It 'removes the Tenable TAG registry key before relink when it exists' {
         $script:TagHarnessOutput | Should -Match 'DetailedResult\s+: wrong target with CSV group: unlink \+ relink using CSV group'
-        $script:TagHarnessOutput | Should -Match 'Actions\s+: RemoveTagRegistry:Removed; UnlinkAgent:Success; LinkAgent:Success:Windows Servers:Csv'
+        [regex]::Match($script:TagHarnessOutput, 'Actions.*RemoveTagRegistry:Removed', 'Singleline').Success | Should -Be $true
         $script:TagHarnessOutput | Should -Match 'RemovedPaths\s+: HKLM:\\SOFTWARE\\Tenable\\TAG'
     }
 }

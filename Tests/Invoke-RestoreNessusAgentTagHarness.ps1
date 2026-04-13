@@ -4,8 +4,12 @@ Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Private') -Filter '*.ps1' -Fi
     . $_.FullName
 }
 
-Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File | Sort-Object Name | ForEach-Object {
+Get-ChildItem -LiteralPath (Join-Path $moduleRoot 'Public') -Filter '*.ps1' -File | Sort-Object Name | Where-Object { $_.Name -ne 'Export-TIOAgents.ps1' } | ForEach-Object {
     . $_.FullName
+}
+
+function Get-MeDistributionServer {
+    $null
 }
 
 $script:HarnessState = @{

@@ -12,6 +12,9 @@ function Install-NessusAgent {
         [string]$Version,
 
         [Parameter()]
+        [switch]$ForceDownload,
+
+        [Parameter()]
         [string]$LogPath = (Get-NessusAgentInstallLogPath)
     )
 
@@ -25,6 +28,10 @@ function Install-NessusAgent {
 
         if ($PSBoundParameters.ContainsKey('Version')) {
             $downloadParams.Version = $Version
+        }
+
+        if ($ForceDownload) {
+            $downloadParams.ForceDownload = $true
         }
 
         $downloadResult = Get-NessusAgentInstaller @downloadParams

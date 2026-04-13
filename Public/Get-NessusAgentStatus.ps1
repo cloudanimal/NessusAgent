@@ -9,13 +9,9 @@ function Get-NessusAgentStatus {
     $rawLines = $result.Output
     $exitCode = $result.ExitCode
 
-    if ($exitCode -ne 0) {
-        $message = ($rawLines | Where-Object { $_ } | ForEach-Object { $_.ToString().Trim() }) -join [Environment]::NewLine
-        if (-not $message) {
-            $message = "nessuscli.exe agent status failed with exit code $exitCode."
-        }
-
-        throw $message
+    $hasOutput = @($rawLines | Where-Object { $_ -and $_.ToString().Trim() }).Count -gt 0
+    if ($exitCode -ne 0 -and -not $hasOutput) {
+        throw "nessuscli.exe agent status failed with exit code $exitCode and produced no output."
     }
 
     $data = [ordered]@{
@@ -34,6 +30,7 @@ function Get-NessusAgentStatus {
         LastConnectionAttemptText = $null
         JobsPending = $null
         AgentStatus = $null
+        StatusExitCode = $exitCode
         RawOutput = ($rawLines -join [Environment]::NewLine)
     }
 
@@ -112,11 +109,11 @@ function Get-NessusAgentStatus {
     $normalizedRunning = if ($data.Running) { $data.Running.ToString().Trim().ToLowerInvariant() } else { '' }
 
     $data.AgentStatus = switch ($true) {
-        ($normalizedLinkStatus -eq 'connected') {
+        ($normalizedLinkStatus -eq 'connected' -or $normalizedLinkStatus -like 'connected *') {
             'Connected'
             break
         }
-        ($normalizedLinkStatus -in @('not linked', 'unlinked')) {
+        ($normalizedLinkStatus -in @('not linked', 'unlinked') -or $normalizedLinkStatus -like 'not linked*') {
             'Unlinked'
             break
         }

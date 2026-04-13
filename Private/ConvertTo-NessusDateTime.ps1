@@ -10,14 +10,15 @@ function ConvertTo-NessusDateTime {
         return $null
     }
 
-    $parsed = $null
-    if ([datetime]::TryParse($Value, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AllowWhiteSpaces, [ref]$parsed)) {
-        return $parsed
+    if ($Value -match '^\d+$') {
+        $epoch = [datetime]::new(1970, 1, 1, 0, 0, 0, [System.DateTimeKind]::Utc)
+        return $epoch.AddSeconds([long]$Value).ToLocalTime()
     }
 
-    if ([datetime]::TryParse($Value, [System.Globalization.CultureInfo]::CurrentCulture, [System.Globalization.DateTimeStyles]::AllowWhiteSpaces, [ref]$parsed)) {
-        return $parsed
+    try {
+        return [datetime]::Parse($Value)
     }
-
-    return $null
+    catch {
+        return $null
+    }
 }

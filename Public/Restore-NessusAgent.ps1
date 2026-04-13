@@ -36,6 +36,7 @@ function Get-EpcRegistry {
         DCServerPort = if ($serverInfo -and $serverInfo.PSObject.Properties['DCServerPort']) { $serverInfo.DCServerPort } else { $null }
         DCServerSecurePort = if ($serverInfo -and $serverInfo.PSObject.Properties['DCServerSecurePort']) { $serverInfo.DCServerSecurePort } else { $null }
         DCServerProtocol = if ($serverInfo -and $serverInfo.PSObject.Properties['DCServerProtocol']) { $serverInfo.DCServerProtocol } else { $null }
+        DistributionServerName = if ($serverInfo -and $serverInfo.PSObject.Properties['DistributionServerName']) { $serverInfo.DistributionServerName } else { $null }
         BaseProperties = $baseProperties.PSObject.Properties | Where-Object { $_.Name -notlike 'PS*' } | ForEach-Object {
             [pscustomobject]@{
                 Name = $_.Name
@@ -62,20 +63,31 @@ function Get-EpcRegistry {
     }
 }
 
-function Get-EpcDistributionServer {
+function Get-MeDistributionServer {
+    [Alias('Get-MEDS')]
     [CmdletBinding()]
     param()
 
     $registry = Get-EpcRegistry
 
+    $systemDetailsPath = Join-Path -Path (Split-Path -Parent $registry.ServerInfoPath) -ChildPath 'SystemDetails'
+    $localMachineName = $null
+    if (Test-Path -LiteralPath $systemDetailsPath) {
+        $systemDetails = Get-ItemProperty -LiteralPath $systemDetailsPath
+        if ($systemDetails.PSObject.Properties['LocalMachineName']) {
+            $localMachineName = $systemDetails.LocalMachineName
+        }
+    }
+
     [pscustomobject]@{
-        ServerName = $registry.DCServerName
+        DistributionServerName = $registry.DistributionServerName
         IPAddress = $registry.DCServerIPAddress
         LastAccessName = $registry.DCLastAccessName
         Port = $registry.DCServerPort
         SecurePort = $registry.DCServerSecurePort
         Protocol = $registry.DCServerProtocol
         RegistryPath = $registry.ServerInfoPath
+        LocalMachineName = $localMachineName
         Raw = $registry
     }
 }
@@ -90,7 +102,7 @@ function Write-NessusAgentLog {
         [string]$Tmp = (Get-NessusAgentWorkingPath)
     )
 
-    $localLogRoot = $Tmp
+    $localLogRoot = if (-not [string]::IsNullOrWhiteSpace($env:TEMP)) { $env:TEMP } else { $Tmp }
     if (-not (Test-Path -LiteralPath $localLogRoot)) {
         New-Item -ItemType Directory -Path $localLogRoot -Force | Out-Null
     }
@@ -103,7 +115,7 @@ function Write-NessusAgentLog {
     $epcDistributionServer = $null
     try {
         if ($env:OS -eq 'Windows_NT') {
-            $epcDistributionServer = Get-EpcDistributionServer
+            $epcDistributionServer = Get-MeDistributionServer
         }
     }
     catch {
@@ -121,21 +133,22 @@ function Write-NessusAgentLog {
         EpcDistributionServer = $epcDistributionServer
     } | ConvertTo-Json -Depth 8
 
-    Set-Content -LiteralPath $localLogPath -Value $logPayload -Encoding UTF8
+    if (-not $WhatIfPreference) {
+        Set-Content -LiteralPath $localLogPath -Value $logPayload -Encoding UTF8
+    }
 
     $distributionLogPath = $null
-    if ($epcDistributionServer -and $epcDistributionServer.ServerName) {
+    if ((-not $WhatIfPreference) -and $epcDistributionServer -and $epcDistributionServer.DistributionServerName -and (Test-Path -LiteralPath $localLogPath)) {
         try {
-            $distributionLogRoot = "\\$($epcDistributionServer.ServerName)\tenable\agent\logs"
-            if (-not (Test-Path -LiteralPath $distributionLogRoot)) {
-                New-Item -ItemType Directory -Path $distributionLogRoot -Force | Out-Null
-            }
+            $distributionServer = $epcDistributionServer.DistributionServerName
+            $distributionLogRoot = "\\$distributionServer\logs\Tenable"
 
             $distributionLogPath = Join-Path -Path $distributionLogRoot -ChildPath $logName
             Copy-Item -LiteralPath $localLogPath -Destination $distributionLogPath -Force
         }
         catch {
             $distributionLogPath = $null
+            Write-Warning ("Failed to upload log to '{0}': {1}" -f $distributionLogRoot, $_.Exception.Message)
         }
     }
 
@@ -163,6 +176,9 @@ function Restore-NessusAgent {
 
         [Parameter()]
         [string]$DownloadPath,
+
+        [Parameter()]
+        [switch]$DownloadLatest,
 
         [Parameter()]
         [ValidatePattern('\d+\.\d+\.\d+')]
@@ -211,7 +227,15 @@ function Restore-NessusAgent {
         [int]$MaxHoursSinceConnectionAttempt = 24,
 
         [Parameter()]
-        [int]$MaxHoursSinceScan = 168
+        [int]$MaxHoursSinceScan = 168,
+
+        [Parameter()]
+        [ValidateRange(0, 30)]
+        [int]$LinkStatusRetryCount = 6,
+
+        [Parameter()]
+        [ValidateRange(1, 60)]
+        [int]$LinkStatusRetryDelaySeconds = 10
     )
 
     process {
@@ -312,6 +336,10 @@ function Restore-NessusAgent {
                 $installParams.Version = $Version
             }
 
+            if ($DownloadLatest) {
+                $installParams.ForceDownload = $true
+            }
+
             $installResult = Install-NessusAgent @installParams
             $pathExists = Test-Path -LiteralPath $Path
 
@@ -390,17 +418,17 @@ function Restore-NessusAgent {
         $linkRelatedFindings = @($health.Findings | Where-Object { $_.Property -in @('LinkedTo', 'LinkStatus', 'LastConnect', 'LastConnectionAttempt') })
         $needsRelink = $Relink -and ($linkRelatedFindings.Count -gt 0)
         if ($needsRelink) {
-            $groupName = $null
+            $resolvedGroupName = $null
             $groupSource = $null
 
             if (-not [string]::IsNullOrWhiteSpace($GroupName)) {
-                $groupName = $GroupName.Trim()
+                $resolvedGroupName = $GroupName.Trim()
                 $groupSource = 'Explicit'
             }
             else {
                 try {
                     $groupInfo = Get-NessusAgentGroupFromCsv -CsvPath $CsvPath -ComputerName $ComputerName
-                    $groupName = $groupInfo.Group
+                    $resolvedGroupName = $groupInfo.Group
                     $groupSource = 'Csv'
                 }
                 catch {
@@ -412,13 +440,13 @@ function Restore-NessusAgent {
                     })
 
                     if ($GroupOverride) {
-                        $groupName = 'SCPM'
+                        $resolvedGroupName = 'SCPM'
                         $groupSource = 'Override'
                     }
                 }
             }
 
-            if ([string]::IsNullOrWhiteSpace($groupName)) {
+            if ([string]::IsNullOrWhiteSpace($resolvedGroupName)) {
                 $actionsArray = [object[]]$actions.ToArray()
                 $result = [pscustomobject]@{
                     Changed = ($actions.Count -gt 0)
@@ -433,7 +461,7 @@ function Restore-NessusAgent {
                 return $result
             }
 
-            if ($PSCmdlet.ShouldProcess($ComputerName, "Relink Nessus Agent to $TargetHost`:$Port with group '$groupName'")) {
+            if ($PSCmdlet.ShouldProcess($ComputerName, "Relink Nessus Agent to $TargetHost`:$Port with group '$resolvedGroupName'")) {
                 $tagRegistryResult = Remove-NessusAgentTagRegistry -Confirm:$false
                 if ($tagRegistryResult -and $tagRegistryResult.Removed) {
                     $actions.Add([pscustomobject]@{
@@ -444,14 +472,15 @@ function Restore-NessusAgent {
                 }
 
                 $unlinkResult = Invoke-NessusCli -Path $Path -ArgumentList @('agent', 'unlink', '--force')
+                $wasLinked = -not [string]::IsNullOrWhiteSpace($health.LinkedHost) -and $health.LinkedHost -ne 'None'
                 $actions.Add([pscustomobject]@{
                     Action = 'UnlinkAgent'
                     Target = $TargetHost
-                    Result = if ($unlinkResult.ExitCode -eq 0) { 'Success' } else { 'Failed' }
+                    Result = if ($unlinkResult.ExitCode -eq 0) { 'Success' } elseif (-not $wasLinked) { 'Skipped' } else { 'Failed' }
                     Output = $unlinkResult.OutputText
                 })
 
-                if ($unlinkResult.ExitCode -ne 0) {
+                if ($unlinkResult.ExitCode -ne 0 -and $wasLinked) {
                     throw "nessuscli agent unlink failed.`n$($unlinkResult.OutputText)"
                 }
 
@@ -462,7 +491,7 @@ function Restore-NessusAgent {
                     "--host=$TargetHost",
                     "--port=$Port",
                     "--name=$AgentName",
-                    "--groups=$groupName"
+                    "--groups=$resolvedGroupName"
                 )
 
                 $linkResult = Invoke-NessusCli -Path $Path -ArgumentList $linkArguments
@@ -470,7 +499,7 @@ function Restore-NessusAgent {
                     Action = 'LinkAgent'
                     Target = "$TargetHost`:$Port"
                     Result = if ($linkResult.ExitCode -eq 0) { 'Success' } else { 'Failed' }
-                    Group = $groupName
+                    Group = $resolvedGroupName
                     GroupSource = $groupSource
                     Output = $linkResult.OutputText
                 })
@@ -479,9 +508,19 @@ function Restore-NessusAgent {
                     throw "nessuscli agent link failed.`n$($linkResult.OutputText)"
                 }
 
-                Start-Sleep -Seconds 5
-                $status = Get-NessusAgentStatus -Path $Path
-                $health = Get-NessusAgentHealth -InputObject $status -ExpectedHost $TargetHost -MaxHoursSinceConnect $MaxHoursSinceConnect -MaxHoursSinceConnectionAttempt $MaxHoursSinceConnectionAttempt -MaxHoursSinceScan $MaxHoursSinceScan
+                for ($attempt = 0; $attempt -le $LinkStatusRetryCount; $attempt++) {
+                    if ($attempt -gt 0) {
+                        Start-Sleep -Seconds $LinkStatusRetryDelaySeconds
+                    }
+
+                    $status = Get-NessusAgentStatus -Path $Path
+                    $health = Get-NessusAgentHealth -InputObject $status -ExpectedHost $TargetHost -MaxHoursSinceConnect $MaxHoursSinceConnect -MaxHoursSinceConnectionAttempt $MaxHoursSinceConnectionAttempt -MaxHoursSinceScan $MaxHoursSinceScan
+
+                    $normalizedLinkStatus = if ($status.LinkStatus) { $status.LinkStatus.ToString().Trim().ToLowerInvariant() } else { '' }
+                    if ($normalizedLinkStatus -eq 'connected' -or $normalizedLinkStatus -like 'connected *') {
+                        break
+                    }
+                }
             }
         }
 

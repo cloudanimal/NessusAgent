@@ -80,11 +80,12 @@ function Get-NessusAgentHealth {
             })
         }
         else {
-            switch ($status.LinkStatus.ToString().Trim().ToLowerInvariant()) {
-                'connected' {
+            $normalizedLinkStatusValue = $status.LinkStatus.ToString().Trim().ToLowerInvariant()
+            switch ($true) {
+                ($normalizedLinkStatusValue -eq 'connected' -or $normalizedLinkStatusValue -like 'connected *') {
                     break
                 }
-                'not linked' {
+                ($normalizedLinkStatusValue -eq 'not linked') {
                     $findings.Add([pscustomobject]@{
                         Property = 'LinkStatus'
                         Severity = 'Error'
@@ -92,7 +93,7 @@ function Get-NessusAgentHealth {
                         Message = 'Agent is not linked.'
                     })
                 }
-                'unlinked' {
+                ($normalizedLinkStatusValue -eq 'unlinked') {
                     $findings.Add([pscustomobject]@{
                         Property = 'LinkStatus'
                         Severity = 'Error'
@@ -131,7 +132,7 @@ function Get-NessusAgentHealth {
                 })
             }
         }
-        elseif ($status.LastConnectText) {
+        elseif ($status.LastConnectText -and $status.LastConnectText.Trim().ToLowerInvariant() -notin @('never', '(null)', 'n/a', '')) {
             $findings.Add([pscustomobject]@{
                 Property = 'LastConnect'
                 Severity = 'Warning'
@@ -151,7 +152,7 @@ function Get-NessusAgentHealth {
                 })
             }
         }
-        elseif ($status.LastConnectionAttemptText) {
+        elseif ($status.LastConnectionAttemptText -and $status.LastConnectionAttemptText.Trim().ToLowerInvariant() -notin @('never', '(null)', 'n/a', '')) {
             $findings.Add([pscustomobject]@{
                 Property = 'LastConnectionAttempt'
                 Severity = 'Warning'
@@ -171,7 +172,7 @@ function Get-NessusAgentHealth {
                 })
             }
         }
-        elseif ($status.LastScannedText) {
+        elseif ($status.LastScannedText -and $status.LastScannedText.Trim().ToLowerInvariant() -notin @('never', '(null)', 'n/a', '')) {
             $findings.Add([pscustomobject]@{
                 Property = 'LastScanned'
                 Severity = 'Warning'
