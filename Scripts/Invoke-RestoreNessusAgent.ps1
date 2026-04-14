@@ -84,6 +84,37 @@ function Get-ExitCodeFromFlatResult {
     0
 }
 
+function New-HealthSnapshot {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [psobject]$Health
+    )
+
+    if ($null -eq $Health) {
+        return $null
+    }
+
+    $status = if ($Health.PSObject.Properties['Status']) { $Health.Status } else { $null }
+
+    [pscustomobject]@{
+        overallStatus = if ($Health.PSObject.Properties['OverallStatus']) { $Health.OverallStatus } else { $null }
+        isHealthy = if ($Health.PSObject.Properties['IsHealthy']) { [bool]$Health.IsHealthy } else { $false }
+        healthExitCode = if ($Health.PSObject.Properties['ExitCode']) { $Health.ExitCode } else { $null }
+        summary = if ($Health.PSObject.Properties['Summary']) { $Health.Summary } else { $null }
+        findingCount = if ($Health.PSObject.Properties['FindingCount']) { $Health.FindingCount } else { 0 }
+        agentStatus = if ($Health.PSObject.Properties['AgentStatus']) { $Health.AgentStatus } else { $null }
+        linkedHost = if ($Health.PSObject.Properties['LinkedHost']) { $Health.LinkedHost } else { $null }
+        expectedHost = if ($Health.PSObject.Properties['ExpectedHost']) { $Health.ExpectedHost } else { $null }
+        linkedTo = if ($status -and $status.PSObject.Properties['LinkedTo']) { $status.LinkedTo } else { $null }
+        linkStatus = if ($status -and $status.PSObject.Properties['LinkStatus']) { $status.LinkStatus } else { $null }
+        running = if ($status -and $status.PSObject.Properties['Running']) { $status.Running } else { $null }
+        lastConnectUtc = if ($status -and $status.PSObject.Properties['LastConnect'] -and $status.LastConnect -is [datetime]) { $status.LastConnect.ToUniversalTime().ToString('o') } else { $null }
+        lastConnectionAttemptUtc = if ($status -and $status.PSObject.Properties['LastConnectionAttempt'] -and $status.LastConnectionAttempt -is [datetime]) { $status.LastConnectionAttempt.ToUniversalTime().ToString('o') } else { $null }
+        lastScannedUtc = if ($status -and $status.PSObject.Properties['LastScanned'] -and $status.LastScanned -is [datetime]) { $status.LastScanned.ToUniversalTime().ToString('o') } else { $null }
+    }
+}
+
 function Write-FormattedResult {
     [CmdletBinding()]
     param(
@@ -145,6 +176,7 @@ function Write-FormattedResult {
 
 try {
     $outputMode = $PSCmdlet.ParameterSetName
+    $runStart = Get-Date
 
     $configuration = Get-NessusAgentConfiguration -IncludeSecrets
     $resolvedComputerName = $ComputerName
@@ -254,13 +286,43 @@ Set one of these before running with -Relink:
         GroupSource = if ($linkAction) { $linkAction.GroupSource } else { $null }
         LocalLogPath = if ($result.Log) { $result.Log.LocalLogPath } else { $null }
         RemoteLogPath = if ($result.Log) { $result.Log.RemoteLogPath } else { $null }
+        timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
+        durationMs = [int]((Get-Date) - $runStart).TotalMilliseconds
+        csvPath = if ($PSBoundParameters.ContainsKey('CsvPath')) { $CsvPath } else { $null }
+        actions = if ($result.Actions) {
+            @($result.Actions | ForEach-Object {
+                if ($_.PSObject.Properties['Group'] -and $_.PSObject.Properties['GroupSource']) {
+                    '{0}:{1}:{2}:{3}' -f $_.Action, $_.Result, $_.Group, $_.GroupSource
+                }
+                elseif ($_.PSObject.Properties['Group']) {
+                    '{0}:{1}:{2}' -f $_.Action, $_.Result, $_.Group
+                }
+                else {
+                    '{0}:{1}' -f $_.Action, $_.Result
+                }
+            })
+        }
+        else { @() }
+        warnings = if ($result.After -and $result.After.PSObject.Properties['Findings']) {
+            @($result.After.Findings | Where-Object { $_.Severity -eq 'Warning' } | ForEach-Object { $_.Message })
+        }
+        else { @() }
+        errors = if ($result.After -and $result.After.PSObject.Properties['Findings']) {
+            @($result.After.Findings | Where-Object { $_.Severity -eq 'Error' } | ForEach-Object { $_.Message })
+        }
+        else { @() }
+        before = New-HealthSnapshot -Health $result.Before
+        after = New-HealthSnapshot -Health $result.After
     }
 
+    $flatResult | Add-Member -NotePropertyName exitCode -NotePropertyValue (Get-ExitCodeFromFlatResult -Result $flatResult)
+
     Write-FormattedResult -FlatResult $flatResult -OutputMode $outputMode
-    exit (Get-ExitCodeFromFlatResult -Result $flatResult)
+    exit $flatResult.exitCode
 }
 catch {
     $outputMode = $PSCmdlet.ParameterSetName
+    $runEnd = Get-Date
 
     $flatErrorResult = [pscustomobject]@{
         ComputerName = $ComputerName
@@ -278,6 +340,15 @@ catch {
         GroupSource = if ($PSBoundParameters.ContainsKey('Group')) { 'Explicit' } else { $null }
         LocalLogPath = $null
         RemoteLogPath = $null
+        timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
+        durationMs = if (Get-Variable -Name runStart -Scope Local -ErrorAction SilentlyContinue) { [int]($runEnd - $runStart).TotalMilliseconds } else { $null }
+        csvPath = if ($PSBoundParameters.ContainsKey('CsvPath')) { $CsvPath } else { $null }
+        actions = @()
+        warnings = @()
+        errors = @($_.Exception.Message)
+        before = $null
+        after = $null
+        exitCode = 2
     }
 
     Write-FormattedResult -FlatResult $flatErrorResult -OutputMode $outputMode
