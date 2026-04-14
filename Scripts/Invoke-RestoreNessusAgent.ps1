@@ -115,6 +115,46 @@ function New-HealthSnapshot {
     }
 }
 
+function ConvertTo-OperatorJson {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)]
+        [psobject]$Result
+    )
+
+    $normalized = [ordered]@{}
+    foreach ($property in $Result.PSObject.Properties) {
+        $normalized[$property.Name] = $property.Value
+    }
+
+    foreach ($name in @('actions', 'warnings', 'errors')) {
+        if (-not $normalized.Contains($name) -or $null -eq $normalized[$name]) {
+            $normalized[$name] = @()
+            continue
+        }
+
+        $value = $normalized[$name]
+        if ($value -is [System.Collections.IDictionary] -and $value.Keys.Count -eq 0) {
+            $normalized[$name] = @()
+            continue
+        }
+
+        if ($value -is [string]) {
+            $normalized[$name] = @($value)
+            continue
+        }
+
+        if ($value -is [System.Collections.IEnumerable] -and -not ($value -is [string])) {
+            $normalized[$name] = @($value)
+            continue
+        }
+
+        $normalized[$name] = @($value)
+    }
+
+    ([pscustomobject]$normalized | ConvertTo-Json -Compress -Depth 10)
+}
+
 function Write-FormattedResult {
     [CmdletBinding()]
     param(
@@ -131,7 +171,7 @@ function Write-FormattedResult {
             break
         }
         'Json' {
-            $FlatResult | ConvertTo-Json -Compress
+            ConvertTo-OperatorJson -Result $FlatResult
             break
         }
         'Tab' {
