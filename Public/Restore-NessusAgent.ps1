@@ -138,6 +138,7 @@ function Write-NessusAgentLog {
     }
 
     $distributionLogPath = $null
+    $distributionUploadWarning = $null
     if ((-not $WhatIfPreference) -and $epcDistributionServer -and $epcDistributionServer.DistributionServerName -and (Test-Path -LiteralPath $localLogPath)) {
         try {
             $distributionServer = $epcDistributionServer.DistributionServerName
@@ -148,13 +149,14 @@ function Write-NessusAgentLog {
         }
         catch {
             $distributionLogPath = $null
-            Write-Warning ("Failed to upload log to '{0}': {1}" -f $distributionLogRoot, $_.Exception.Message)
+            $distributionUploadWarning = ("Failed to upload log to '{0}': {1}" -f $distributionLogRoot, $_.Exception.Message)
         }
     }
 
     [pscustomobject]@{
         LocalLogPath = $localLogPath
         RemoteLogPath = $distributionLogPath
+        RemoteLogWarning = $distributionUploadWarning
     }
 }
 

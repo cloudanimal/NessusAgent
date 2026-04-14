@@ -190,7 +190,8 @@ function Write-FormattedResult {
                 'Group',
                 'GroupSource',
                 'LocalLogPath',
-                'RemoteLogPath'
+                'RemoteLogPath',
+                'RemoteLogWarning'
             )
 
             $header = $properties -join "`t"
@@ -327,6 +328,7 @@ Set one of these before running with -Relink:
         GroupSource = if ($linkAction) { $linkAction.GroupSource } else { $null }
         LocalLogPath = if ($result.Log) { $result.Log.LocalLogPath } else { $null }
         RemoteLogPath = if ($result.Log) { $result.Log.RemoteLogPath } else { $null }
+        RemoteLogWarning = if ($result.Log -and $result.Log.PSObject.Properties['RemoteLogWarning']) { $result.Log.RemoteLogWarning } else { $null }
         timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
         durationMs = [int]((Get-Date) - $runStart).TotalMilliseconds
         csvPath = if ($PSBoundParameters.ContainsKey('CsvPath')) { $CsvPath } else { $null }
@@ -357,6 +359,9 @@ Set one of these before running with -Relink:
                         [string]$_
                     }
                 }
+            }
+            if ($result.Log -and $result.Log.PSObject.Properties['RemoteLogWarning'] -and -not [string]::IsNullOrWhiteSpace($result.Log.RemoteLogWarning)) {
+                $result.Log.RemoteLogWarning
             }
         )
         errors = if ($result.After -and $result.After.PSObject.Properties['Findings']) {
@@ -392,6 +397,7 @@ catch {
         GroupSource = if ($PSBoundParameters.ContainsKey('Group')) { 'Explicit' } else { $null }
         LocalLogPath = $null
         RemoteLogPath = $null
+        RemoteLogWarning = $null
         timestampUtc = (Get-Date).ToUniversalTime().ToString('o')
         durationMs = if (Get-Variable -Name runStart -Scope Local -ErrorAction SilentlyContinue) { [int]($runEnd - $runStart).TotalMilliseconds } else { $null }
         csvPath = if ($PSBoundParameters.ContainsKey('CsvPath')) { $CsvPath } else { $null }
