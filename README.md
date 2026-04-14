@@ -8,6 +8,8 @@ PowerShell module and operator script for checking, repairing, reinstalling, and
 - Reinstalls the agent when it is missing.
 - Relinks agents that point to the wrong Tenable cloud target.
 - Resolves group assignment from a CSV file or a direct override.
+- Supports guarded uninstall workflows for Nessus Agent only.
+- Exports Tenable agent inventory to CSV/JSONL for group-driven relink workflows.
 - Emits flat output formats that work well with deployment tools and reporting pipelines.
 
 ## Repository Layout
@@ -72,6 +74,14 @@ ManageEngine-style JSON output:
 pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Json
 ```
 
+Optional post-link convergence retry knobs:
+
+```powershell
+Restore-NessusAgent -Relink -CsvPath .\Tests\agents.csv -LinkStatusRetryCount 6 -LinkStatusRetryDelaySeconds 10
+```
+
+Use these when a freshly linked agent reports `connection has not been attempted` for a short period after relink.
+
 Other flat output formats:
 
 ```powershell
@@ -100,6 +110,52 @@ Import-Module .\Restore-NessusAgent.psd1 -Force
 Get-NessusAgentConfiguration
 ```
 
+## Uninstall Workflow
+
+Preflight safety checks only (no uninstall):
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+Uninstall-NessusAgent -AllowUninstall -PreflightOnly -Confirm:$false
+```
+
+Actual uninstall (Nessus Agent only, guarded by product identity checks):
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+Uninstall-NessusAgent -AllowUninstall -Confirm:$false
+```
+
+The command validates product code format, uninstall registry identity, and running process state before calling `msiexec`.
+
+## Export-TIOAgents Workflow
+
+Fast inventory export (CSV with group column):
+
+```powershell
+pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -Mode Fast
+```
+
+Detail export with full-fidelity JSONL:
+
+```powershell
+pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -Mode Detail
+```
+
+Detail test sample run:
+
+```powershell
+pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -DetailTest -SampleSize 10
+```
+
+Then run repair using exported CSV:
+
+```powershell
+pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -CsvPath C:\Temp\Tenable\TioAgentInventory_Fast_Scanner1.csv -Confirm:$false
+```
+
+If a matched row has an empty `Groups` value, CSV group resolution will fail by design. In that case pass `-Group` explicitly or use `-GroupOverride`.
+
 ## Testing
 
 Run the harness:
@@ -112,6 +168,14 @@ Run the Pester suite:
 
 ```powershell
 pwsh -File .\Tests\Invoke-RestoreNessusAgentPester.ps1
+```
+
+Run all validations directly:
+
+```powershell
+Invoke-Pester -Path .\Tests -PassThru
+.\Tests\Invoke-RestoreNessusAgentHarness.ps1
+.\Tests\Invoke-RestoreNessusAgentTagHarness.ps1
 ```
 
 GitHub Actions is configured to run the Pester suite on pushes to `main` and on pull requests.
