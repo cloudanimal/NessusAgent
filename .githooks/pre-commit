@@ -1,0 +1,10 @@
+#!/bin/sh
+# Repo pre-commit guard for sensitive content.
+
+if command -v pwsh >/dev/null 2>&1; then
+    pwsh -NoProfile -ExecutionPolicy Bypass -File ./Scripts/Invoke-RepoGuardrails.ps1
+    exit $?
+fi
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./Scripts/Invoke-RepoGuardrails.ps1
+exit $?
