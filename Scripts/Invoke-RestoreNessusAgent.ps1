@@ -285,7 +285,8 @@ Set one of these before running with -Relink:
         $restoreParams.Version = $Version
     }
 
-    $result = Restore-NessusAgent @restoreParams
+    $restoreWarnings = @()
+    $result = Restore-NessusAgent @restoreParams -WarningAction SilentlyContinue -WarningVariable +restoreWarnings
 
     $linkAction = $null
     if ($result.Actions) {
@@ -343,10 +344,21 @@ Set one of these before running with -Relink:
             })
         }
         else { @() }
-        warnings = if ($result.After -and $result.After.PSObject.Properties['Findings']) {
-            @($result.After.Findings | Where-Object { $_.Severity -eq 'Warning' } | ForEach-Object { $_.Message })
-        }
-        else { @() }
+        warnings = @(
+            if ($result.After -and $result.After.PSObject.Properties['Findings']) {
+                $result.After.Findings | Where-Object { $_.Severity -eq 'Warning' } | ForEach-Object { $_.Message }
+            }
+            if ($restoreWarnings) {
+                $restoreWarnings | ForEach-Object {
+                    if ($_ -is [System.Management.Automation.WarningRecord]) {
+                        $_.Message
+                    }
+                    else {
+                        [string]$_
+                    }
+                }
+            }
+        )
         errors = if ($result.After -and $result.After.PSObject.Properties['Findings']) {
             @($result.After.Findings | Where-Object { $_.Severity -eq 'Error' } | ForEach-Object { $_.Message })
         }
