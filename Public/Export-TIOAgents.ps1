@@ -341,14 +341,27 @@ function Get-TioAgentGroupMembers {
     param(
         [Parameter(Mandatory)][string]$ScannerId,
         [Parameter(Mandatory)][string]$GroupId,
-        [Parameter(Mandatory)][hashtable]$Headers
+        [Parameter(Mandatory)][hashtable]$Headers,
+        [Parameter()][ValidateRange(1,5000)][int]$Limit = 5000
     )
 
-    $uri  = "https://cloud.tenable.com/scanners/$ScannerId/agent-groups/$GroupId/agents"
-    $resp = Invoke-TioRequest -Uri $uri -Headers $Headers -Context 'AgentGroupMembers'
+    $offset = 0
+    $allMembers = New-Object System.Collections.Generic.List[object]
 
-    if ($null -eq $resp) { return @() }
-    @($resp.agents)
+    while ($true) {
+        $uri  = "https://cloud.tenable.com/scanners/$ScannerId/agent-groups/$GroupId/agents?limit=$Limit&offset=$offset"
+        $resp = Invoke-TioRequest -Uri $uri -Headers $Headers -Context 'AgentGroupMembers'
+
+        if ($null -eq $resp) { break }
+
+        $chunk = @($resp.agents)
+        foreach ($m in $chunk) { [void]$allMembers.Add($m) }
+
+        if ($chunk.Count -lt $Limit) { break }
+        $offset += $Limit
+    }
+
+    $allMembers
 }
 
 # -------------------------
@@ -426,7 +439,7 @@ try {
     foreach ($grp in $groups) {
         if ($null -eq $grp -or $null -eq $grp.id) { continue }
 
-        $members = Get-TioAgentGroupMembers -ScannerId $ScannerId -GroupId ([string]$grp.id) -Headers $headers
+        $members = Get-TioAgentGroupMembers -ScannerId $ScannerId -GroupId ([string]$grp.id) -Headers $headers -Limit $Limit
         foreach ($mem in $members) {
             $mid = [int]$mem.id
             if ($isDetailTestRun -and -not $sampleIdSet.Contains($mid)) { continue }

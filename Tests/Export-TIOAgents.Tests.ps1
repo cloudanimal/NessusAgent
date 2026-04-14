@@ -156,4 +156,77 @@ public class TioMockHttpException : System.Exception {
         $summary2 = Get-Content -LiteralPath $summaryPath -Raw | ConvertFrom-Json
         [int]$summary2.Skipped404Count | Should -Be 0
     }
+
+    It 'resolves group membership when agent appears on a later members page' {
+        $outDir = Join-Path $TestDrive 'out-group-pagination'
+
+        Mock -CommandName Invoke-RestMethod -MockWith {
+            param([string]$Method, [string]$Uri, [hashtable]$Headers)
+
+            if ($Uri -like '*scanners/1/agents`?*') {
+                return [pscustomobject]@{
+                    agents = @(
+                        [pscustomobject]@{
+                            id = 100000001
+                            name = 'TEST-AGENT001'
+                            ip = '192.0.2.1'
+                            last_connect = 1776178951
+                            last_scanned = 1776178951
+                        }
+                    )
+                }
+            }
+
+            if ($Uri -like '*scanners/1/agent-groups') {
+                return [pscustomobject]@{
+                    groups = @(
+                        [pscustomobject]@{ id = 900001; name = 'Test-Servers' }
+                    )
+                }
+            }
+
+            if ($Uri -like '*scanners/1/agent-groups/900001/agents`?limit=5000&offset=0') {
+                return [pscustomobject]@{
+                    agents = @(
+                        [pscustomobject]@{ id = 101 },
+                        [pscustomobject]@{ id = 102 },
+                        [pscustomobject]@{ id = 103 },
+                        [pscustomobject]@{ id = 104 },
+                        [pscustomobject]@{ id = 105 }
+                    )
+                }
+            }
+
+            if ($Uri -like '*scanners/1/agent-groups/900001/agents`?limit=5&offset=0') {
+                return [pscustomobject]@{
+                    agents = @(
+                        [pscustomobject]@{ id = 101 },
+                        [pscustomobject]@{ id = 102 },
+                        [pscustomobject]@{ id = 103 },
+                        [pscustomobject]@{ id = 104 },
+                        [pscustomobject]@{ id = 105 }
+                    )
+                }
+            }
+
+            if ($Uri -like '*scanners/1/agent-groups/900001/agents`?limit=5&offset=5') {
+                return [pscustomobject]@{
+                    agents = @(
+                        [pscustomobject]@{ id = 100000001 }
+                    )
+                }
+            }
+
+            throw (New-TioHttpException -StatusCode 500 -Message "Unexpected URI: $Uri")
+        }
+
+        $null = & $scriptPath -ScannerId 1 -OutDir $outDir -Mode Fast -AccessKey 'ak' -SecretKey 'sk' -Limit 5
+
+        $csvPath = Join-Path $outDir 'TioAgentInventory_Fast_Scanner1.csv'
+        Test-Path -LiteralPath $csvPath | Should -BeTrue
+
+        $row = Import-Csv -LiteralPath $csvPath | Where-Object { $_.Hostname -eq 'TEST-AGENT001' } | Select-Object -First 1
+        $row | Should -Not -BeNullOrEmpty
+        $row.Groups | Should -Be 'Test-Servers'
+    }
 }

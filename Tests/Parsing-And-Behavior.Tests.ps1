@@ -229,7 +229,7 @@ Describe 'Restore-NessusAgent unlink tolerance' {
             -Path 'C:\Program Files\Tenable\Nessus Agent\nessuscli.exe' `
             -Relink `
             -LinkingKey 'testkey' `
-            -GroupName 'AIGI-Server' `
+            -GroupName 'Test-Servers' `
             -TargetHost 'sensor.cloud.tenable.com' `
             -Port 443 `
             -Confirm:$false
@@ -307,7 +307,7 @@ Describe 'Restore-NessusAgent unlink tolerance' {
             -Path 'C:\Program Files\Tenable\Nessus Agent\nessuscli.exe' `
             -Relink `
             -LinkingKey 'testkey' `
-            -GroupName 'AIGI-Server' `
+            -GroupName 'Test-Servers' `
             -TargetHost 'sensor.cloud.tenable.com' `
             -Port 443 `
             -LinkStatusRetryCount 4 `

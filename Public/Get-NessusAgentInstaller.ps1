@@ -39,7 +39,7 @@ function Get-NessusAgentInstaller {
                 if (-not (Test-Path -LiteralPath $epcDistributionShare)) {
                     New-Item -ItemType Directory -Path $epcDistributionShare -Force | Out-Null
                 }
-                # Simulate share as \\aigi-pwvmeds001\logs\Tenable
+                # Simulate share as \\fileserver01\logs\Tenable
             }
         }
         catch {
