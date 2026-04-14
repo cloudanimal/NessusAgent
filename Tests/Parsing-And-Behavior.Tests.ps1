@@ -319,3 +319,23 @@ Describe 'Restore-NessusAgent unlink tolerance' {
         $result.After.IsHealthy | Should -BeTrue
     }
 }
+
+Describe 'Invoke-RestoreNessusAgent JSON warning capture regression' {
+    It 'suppresses restore warning stream and captures warning records into JSON warnings' {
+        $scriptPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Scripts\Invoke-RestoreNessusAgent.ps1'
+        $content = Get-Content -LiteralPath $scriptPath -Raw
+
+        $content | Should -Match 'Restore-NessusAgent\s+@restoreParams\s+-WarningAction\s+SilentlyContinue\s+-WarningVariable\s+\+restoreWarnings'
+        $content | Should -Match 'if \(\$restoreWarnings\)'
+        $content | Should -Match '\$restoreWarnings\s*\|\s*ForEach-Object'
+    }
+
+    It 'keeps operator JSON collection fields normalized as arrays' {
+        $scriptPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'Scripts\Invoke-RestoreNessusAgent.ps1'
+        $content = Get-Content -LiteralPath $scriptPath -Raw
+
+        $content | Should -Match 'foreach \(\$name in @\(''actions'', ''warnings'', ''errors''\)\)'
+        $content | Should -Match '\$normalized\[\$name\]\s*=\s*@\(\)'
+        $content | Should -Match '\$normalized\[\$name\]\s*=\s*@\(\$value\)'
+    }
+}
