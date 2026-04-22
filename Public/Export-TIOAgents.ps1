@@ -187,13 +187,167 @@ function Export-RunSummaryJson {
     ($Summary | ConvertTo-Json -Depth 6) | Out-File -FilePath $Path -Encoding UTF8
 }
 
+function ConvertTo-ExportTioScalar {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [AllowNull()]
+        [object]$Value
+    )
+
+    if ($null -eq $Value) { return $null }
+
+    if ($Value -is [string] -or $Value -is [ValueType]) {
+        return $Value
+    }
+
+    if ($Value -is [datetime]) {
+        return $Value.ToUniversalTime().ToString('o')
+    }
+
+    if ($Value -is [System.Collections.IEnumerable] -and -not ($Value -is [string])) {
+        return ($Value | ConvertTo-Json -Depth 20 -Compress)
+    }
+
+    if ($Value -is [psobject]) {
+        return ($Value | ConvertTo-Json -Depth 20 -Compress)
+    }
+
+    return [string]$Value
+}
+
+function ConvertTo-TioExportRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [psobject]$Agent,
+
+        [Parameter(Mandatory)]
+        [hashtable]$AgentToGroups
+    )
+
+    $record = [ordered]@{
+        Hostname = if ($Agent.PSObject.Properties['name']) { $Agent.name } else { $null }
+        AgentId = if ($Agent.PSObject.Properties['id']) { $Agent.id } else { $null }
+        Groups = if ($Agent.PSObject.Properties['id'] -and $AgentToGroups.ContainsKey([int]$Agent.id)) {
+            ($AgentToGroups[[int]$Agent.id] | Sort-Object -Unique) -join ', '
+        }
+        else {
+            ''
+        }
+        LastConnectUtc = if ($Agent.PSObject.Properties['last_connect']) { Convert-FromUnixSecondsSafe -Value $Agent.last_connect } else { $null }
+        LastScannedUtc = if ($Agent.PSObject.Properties['last_scanned']) { Convert-FromUnixSecondsSafe -Value $Agent.last_scanned } else { $null }
+    }
+
+    foreach ($property in $Agent.PSObject.Properties) {
+        $outName = [string]$property.Name
+        while ((@($record.Keys | ForEach-Object { $_.ToString().ToLowerInvariant() }) -contains $outName.ToLowerInvariant())) {
+            $outName = "api_$outName"
+        }
+
+        $record[$outName] = ConvertTo-ExportTioScalar -Value $property.Value
+    }
+
+    [pscustomobject]$record
+}
+
+function ConvertTo-FlattenedTioExportRecord {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [psobject]$Agent,
+
+        [Parameter(Mandatory)]
+        [hashtable]$AgentToGroups
+    )
+
+    # Start with base record (includes computed fields + all agent properties)
+    $record = [ordered]@{
+        Hostname = if ($Agent.PSObject.Properties['name']) { $Agent.name } else { $null }
+        AgentId = if ($Agent.PSObject.Properties['id']) { $Agent.id } else { $null }
+        Groups = if ($Agent.PSObject.Properties['id'] -and $AgentToGroups.ContainsKey([int]$Agent.id)) {
+            ($AgentToGroups[[int]$Agent.id] | Sort-Object -Unique) -join ', '
+        }
+        else {
+            ''
+        }
+        LastConnectUtc = if ($Agent.PSObject.Properties['last_connect']) { Convert-FromUnixSecondsSafe -Value $Agent.last_connect } else { $null }
+        LastScannedUtc = if ($Agent.PSObject.Properties['last_scanned']) { Convert-FromUnixSecondsSafe -Value $Agent.last_scanned } else { $null }
+    }
+
+    # Extract health_events into flattened columns
+    if ($Agent.PSObject.Properties['health_events'] -and $null -ne $Agent.health_events) {
+        $events = @($Agent.health_events)
+        $record['HealthEvents_Count'] = $events.Count
+
+        if ($events.Count -gt 0) {
+            # Current state (most recent): first event or highest severity
+            $latestEvent = $events[0]
+            $record['HealthEvents_CurrentState'] = if ($latestEvent.PSObject.Properties['state']) { $latestEvent.state } else { $null }
+            $record['HealthEvents_CurrentStateName'] = if ($latestEvent.PSObject.Properties['state_name']) { $latestEvent.state_name } else { $null }
+            $record['HealthEvents_LastEventTime'] = if ($latestEvent.PSObject.Properties['state_time']) { 
+                Convert-FromUnixSecondsSafe -Value $latestEvent.state_time 
+            } else { $null }
+
+            # Count events by severity
+            $stateNames = @($events | ForEach-Object { $_.state_name })
+            $record['HealthEvents_HealthyCount'] = @($stateNames | Where-Object { $_ -eq 'HEALTHY' }).Count
+            $record['HealthEvents_WarningCount'] = @($stateNames | Where-Object { $_ -eq 'WARNING' }).Count
+            $record['HealthEvents_CriticalCount'] = @($stateNames | Where-Object { $_ -eq 'CRITICAL' }).Count
+        } else {
+            # No events; ensure columns exist with null
+            $record['HealthEvents_CurrentState'] = $null
+            $record['HealthEvents_CurrentStateName'] = $null
+            $record['HealthEvents_LastEventTime'] = $null
+            $record['HealthEvents_HealthyCount'] = 0
+            $record['HealthEvents_WarningCount'] = 0
+            $record['HealthEvents_CriticalCount'] = 0
+        }
+    }
+
+    # Extract remote_settings as individual flattened properties
+    if ($Agent.PSObject.Properties['remote_settings'] -and $null -ne $Agent.remote_settings) {
+        $settings = $Agent.remote_settings
+        if ($settings -is [psobject]) {
+            foreach ($settingProp in $settings.PSObject.Properties) {
+                $settingName = "RemoteSettings_$($settingProp.Name)"
+                $record[$settingName] = ConvertTo-ExportTioScalar -Value $settingProp.Value
+            }
+        }
+    }
+
+    # restart_pending as direct column
+    if ($Agent.PSObject.Properties['restart_pending']) {
+        $record['RestartPending'] = $Agent.restart_pending
+    }
+
+    # Add all other agent properties (excluding those already processed)
+    $excludedProps = @(
+        'name', 'id', 'last_connect', 'last_scanned', 'health_events', 'remote_settings', 'restart_pending'
+    )
+
+    foreach ($property in $Agent.PSObject.Properties) {
+        if ($property.Name -in $excludedProps) { continue }
+
+        $outName = [string]$property.Name
+        while ((@($record.Keys | ForEach-Object { $_.ToString().ToLowerInvariant() }) -contains $outName.ToLowerInvariant())) {
+            $outName = "api_$outName"
+        }
+
+        $record[$outName] = ConvertTo-ExportTioScalar -Value $property.Value
+    }
+
+    [pscustomobject]$record
+}
+
 function Export-PartialArtifacts {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$OutDir,
         [Parameter(Mandatory)][string]$BaseName,
         [Parameter(Mandatory)][object[]]$Agents,
-        [Parameter(Mandatory)][hashtable]$AgentToGroups
+        [Parameter(Mandatory)][hashtable]$AgentToGroups,
+        [Parameter()][bool]$IsDetailMode = $false
     )
 
     if (-not $Agents -or $Agents.Count -eq 0) { return }
@@ -205,19 +359,11 @@ function Export-PartialArtifacts {
     Export-RawDetailJsonl -Agents $Agents -Path $partialRaw
     Write-Warning "Partial RAW export written: $partialRaw"
 
-    # Human-friendly partial report CSV (no nested object noise)
+    # Human-friendly partial report CSV: use flattened format in Detail mode
     $partialCsv = Join-Path $OutDir ("{0}_{1}_PARTIAL_REPORT.csv" -f $BaseName, $ts)
+    $exportFunction = if ($IsDetailMode) { 'ConvertTo-FlattenedTioExportRecord' } else { 'ConvertTo-TioExportRecord' }
     $Agents |
-        Select-Object `
-            @{n='Hostname';e={$_.name}},
-            @{n='AgentId';e={$_.id}},
-            @{n='Groups';e={ if ($AgentToGroups.ContainsKey([int]$_.id)) { ($AgentToGroups[[int]$_.id] | Sort-Object -Unique) -join ', ' } else { '' } }},
-            uuid, platform, distro, os, ip, status,
-            agent_version, core_version,
-            linked_on, last_connect, last_scanned,
-            @{n='LastConnectUtc';e={ Convert-FromUnixSecondsSafe -Value $_.last_connect }},
-            @{n='LastScannedUtc';e={ Convert-FromUnixSecondsSafe -Value $_.last_scanned }},
-            health_state_name |
+        ForEach-Object { & $exportFunction -Agent $_ -AgentToGroups $AgentToGroups } |
         Export-Csv -Path $partialCsv -NoTypeInformation -Encoding UTF8
 
     Write-Warning "Partial REPORT export written: $partialCsv"
@@ -543,18 +689,10 @@ try {
         Write-Host "Raw detail export complete: $outRaw"
     }
 
-    # Report CSV export (friendly view + UTC columns)
+    # Report CSV export: use flattened format in Detail mode, scalar format in Fast mode
+    $exportFunction = if ($IsDetailMode) { 'ConvertTo-FlattenedTioExportRecord' } else { 'ConvertTo-TioExportRecord' }
     $agents |
-        Select-Object `
-            @{n='Hostname';e={$_.name}},
-            @{n='AgentId';e={$_.id}},
-            @{n='Groups';e={ if ($agentToGroups.ContainsKey([int]$_.id)) { ($agentToGroups[[int]$_.id] | Sort-Object -Unique) -join ', ' } else { '' } }},
-            uuid, platform, distro, os, ip, status,
-            agent_version, core_version,
-            linked_on, last_connect, last_scanned,
-            @{n='LastConnectUtc';e={ Convert-FromUnixSecondsSafe -Value $_.last_connect }},
-            @{n='LastScannedUtc';e={ Convert-FromUnixSecondsSafe -Value $_.last_scanned }},
-            health_state_name |
+        ForEach-Object { & $exportFunction -Agent $_ -AgentToGroups $agentToGroups } |
         Export-Csv -Path $outCsv -NoTypeInformation -Encoding UTF8
 
     Write-Host "CSV export complete: $outCsv"
@@ -591,7 +729,7 @@ try {
 }
 catch {
     # Optional nice-to-have: produce partial JSONL + partial report CSV on crash
-    Export-PartialArtifacts -OutDir $OutDir -BaseName $baseName -Agents $agents -AgentToGroups $agentToGroups
+    Export-PartialArtifacts -OutDir $OutDir -BaseName $baseName -Agents $agents -AgentToGroups $agentToGroups -IsDetailMode $IsDetailMode
 
     # Also write Skipped404 if any exist even on failure
     if (Get-Variable -Name Skipped404 -Scope Script -ErrorAction SilentlyContinue) {
