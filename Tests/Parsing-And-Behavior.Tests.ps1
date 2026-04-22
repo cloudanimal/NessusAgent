@@ -132,15 +132,17 @@ Describe 'Get-NessusAgentHealth sentinel handling' {
     }
 
     It 'does not raise a parse-error warning for "Never" in LastScanned' {
+        $recent = (Get-Date).AddMinutes(-10)
+
         $status = [pscustomobject]@{
             Running                      = 'Yes'
             LinkedTo                     = 'sensor.cloud.tenable.com:443'
             LinkStatus                   = 'Connected to sensor.cloud.tenable.com:443'
             LastScanned                  = $null
             LastScannedText              = 'Never'
-            LastConnect                  = [datetime]'2026-04-13T20:56:27'
+            LastConnect                  = $recent
             LastConnectText              = '1776113787'
-            LastConnectionAttempt        = [datetime]'2026-04-13T20:56:27'
+            LastConnectionAttempt        = $recent
             LastConnectionAttemptText    = '1776113787'
             AgentStatus                  = 'Connected'
             JobsPending                  = $null
@@ -153,15 +155,17 @@ Describe 'Get-NessusAgentHealth sentinel handling' {
     }
 
     It 'reports OverallStatus OK when connected with "Never" last scanned' {
+        $recent = (Get-Date).AddMinutes(-10)
+
         $status = [pscustomobject]@{
             Running                      = 'Yes'
             LinkedTo                     = 'sensor.cloud.tenable.com:443'
             LinkStatus                   = 'Connected to sensor.cloud.tenable.com:443'
             LastScanned                  = $null
             LastScannedText              = 'Never'
-            LastConnect                  = [datetime]'2026-04-13T20:56:27'
+            LastConnect                  = $recent
             LastConnectText              = '1776113787'
-            LastConnectionAttempt        = [datetime]'2026-04-13T20:56:27'
+            LastConnectionAttempt        = $recent
             LastConnectionAttemptText    = '1776113787'
             AgentStatus                  = 'Connected'
             JobsPending                  = $null
@@ -245,6 +249,7 @@ Describe 'Restore-NessusAgent unlink tolerance' {
 
     It 'retries status checks after relink until link status is connected' {
         $script:statusCallCount = 0
+        $recent = (Get-Date).AddMinutes(-10)
 
         Mock -CommandName Get-NessusAgentStatus -ModuleName Restore-NessusAgent -MockWith {
             $script:statusCallCount++
@@ -254,11 +259,11 @@ Describe 'Restore-NessusAgent unlink tolerance' {
                     Running                   = 'Yes'
                     LinkedTo                  = 'None'
                     LinkStatus                = 'connection has not been attempted'
-                    LastScanned               = [datetime]'2026-04-13T20:56:27'
+                    LastScanned               = $recent
                     LastScannedText           = '1776113787'
-                    LastConnect               = [datetime]'2026-04-13T20:56:27'
+                    LastConnect               = $recent
                     LastConnectText           = '1776113787'
-                    LastConnectionAttempt     = [datetime]'2026-04-13T20:56:27'
+                    LastConnectionAttempt     = $recent
                     LastConnectionAttemptText = '1776113787'
                     AgentStatus               = 'Degraded'
                     JobsPending               = $null
@@ -271,11 +276,11 @@ Describe 'Restore-NessusAgent unlink tolerance' {
                 Running                   = 'Yes'
                 LinkedTo                  = 'sensor.cloud.tenable.com:443'
                 LinkStatus                = 'Connected to sensor.cloud.tenable.com:443'
-                LastScanned               = [datetime]'2026-04-13T20:56:27'
+                LastScanned               = $recent
                 LastScannedText           = '1776113787'
-                LastConnect               = [datetime]'2026-04-13T20:56:27'
+                LastConnect               = $recent
                 LastConnectText           = '1776113787'
-                LastConnectionAttempt     = [datetime]'2026-04-13T20:56:27'
+                LastConnectionAttempt     = $recent
                 LastConnectionAttemptText = '1776113787'
                 AgentStatus               = 'Connected'
                 JobsPending               = $null

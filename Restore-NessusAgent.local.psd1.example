@@ -2,8 +2,11 @@
     NessusServer = 'sensor.cloud.tenable.com:443'
     WorkingDirectory = 'C:\Temp'
     LogPath = 'C:\Temp\agent_install.log'
-    NessusKey = 'replace-with-nessus-linking-key'
-    CustomerUuid = 'replace-with-customer-uuid'
+    # Keep secrets out of this file. Use Set-NessusAgentSecret to store encrypted values.
+    NessusKey = $null
+    CustomerUuid = $null
+    TenableAccessKey = $null
+    TenableSecretKey = $null
     InstallerSearchPaths = @(
         '\\fs\share\vmops'
     )

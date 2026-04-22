@@ -46,6 +46,91 @@ function Ensure-Directory {
     }
 }
 
+function ConvertFrom-ExportTioSecureString {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [System.Security.SecureString]$Value
+    )
+
+    if ($null -eq $Value) {
+        return $null
+    }
+
+    $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Value)
+    try {
+        [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    }
+    finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+    }
+}
+
+function Resolve-ExportTioSecretStorePath {
+    [CmdletBinding()]
+    param()
+
+    $moduleRoot = Split-Path -Parent $PSScriptRoot
+    $localConfigPath = Join-Path -Path $moduleRoot -ChildPath 'Restore-NessusAgent.local.psd1'
+    if (Test-Path -LiteralPath $localConfigPath) {
+        $localConfig = Import-PowerShellDataFile -LiteralPath $localConfigPath
+        if ($localConfig.ContainsKey('SecretStorePath') -and -not [string]::IsNullOrWhiteSpace([string]$localConfig['SecretStorePath'])) {
+            return [string]$localConfig['SecretStorePath']
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        return (Join-Path -Path $env:LOCALAPPDATA -ChildPath 'Restore-NessusAgent\secrets.clixml')
+    }
+
+    Join-Path -Path 'C:\Temp' -ChildPath 'Restore-NessusAgent\secrets.clixml'
+}
+
+function Resolve-ExportTioApiKeys {
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$AccessKey,
+
+        [Parameter()]
+        [string]$SecretKey
+    )
+
+    $resolvedAccessKey = $AccessKey
+    $resolvedSecretKey = $SecretKey
+
+    if (-not [string]::IsNullOrWhiteSpace($resolvedAccessKey) -and -not [string]::IsNullOrWhiteSpace($resolvedSecretKey)) {
+        return [pscustomobject]@{ AccessKey = $resolvedAccessKey; SecretKey = $resolvedSecretKey }
+    }
+
+    $secretStorePath = Resolve-ExportTioSecretStorePath
+    if (-not [string]::IsNullOrWhiteSpace($secretStorePath) -and (Test-Path -LiteralPath $secretStorePath)) {
+        $secretStore = Import-Clixml -LiteralPath $secretStorePath
+
+        if ([string]::IsNullOrWhiteSpace($resolvedAccessKey) -and $secretStore.PSObject.Properties['TenableAccessKey']) {
+            $value = $secretStore.TenableAccessKey
+            if ($value -is [System.Security.SecureString]) {
+                $resolvedAccessKey = ConvertFrom-ExportTioSecureString -Value $value
+            }
+            elseif ($value -is [string]) {
+                $resolvedAccessKey = $value
+            }
+        }
+
+        if ([string]::IsNullOrWhiteSpace($resolvedSecretKey) -and $secretStore.PSObject.Properties['TenableSecretKey']) {
+            $value = $secretStore.TenableSecretKey
+            if ($value -is [System.Security.SecureString]) {
+                $resolvedSecretKey = ConvertFrom-ExportTioSecureString -Value $value
+            }
+            elseif ($value -is [string]) {
+                $resolvedSecretKey = $value
+            }
+        }
+    }
+
+    [pscustomobject]@{ AccessKey = $resolvedAccessKey; SecretKey = $resolvedSecretKey }
+}
+
 function Get-SafeTimestamp {
     (Get-Date).ToString('yyyyMMdd-HHmmss')
 }
@@ -369,6 +454,9 @@ function Get-TioAgentGroupMembers {
 # -------------------------
 
 Ensure-Directory -Path $OutDir
+$resolvedApiKeys = Resolve-ExportTioApiKeys -AccessKey $AccessKey -SecretKey $SecretKey
+$AccessKey = $resolvedApiKeys.AccessKey
+$SecretKey = $resolvedApiKeys.SecretKey
 $headers = New-TioHeaders -AccessKey $AccessKey -SecretKey $SecretKey
 
 # Reset per-run skipped list so repeated invocations in the same session do not leak state.

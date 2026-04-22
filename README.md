@@ -8,8 +8,6 @@ PowerShell module and operator script for checking, repairing, reinstalling, and
 - Reinstalls the agent when it is missing.
 - Relinks agents that point to the wrong Tenable cloud target.
 - Resolves group assignment from a CSV file or a direct override.
-- Supports guarded uninstall workflows for Nessus Agent only.
-- Exports Tenable agent inventory to CSV/JSONL for group-driven relink workflows.
 - Emits flat output formats that work well with deployment tools and reporting pipelines.
 
 ## Repository Layout
@@ -29,6 +27,8 @@ PowerShell module and operator script for checking, repairing, reinstalling, and
 
 Use either environment variables or a local config file.
 
+Recommended for secrets on Windows: use the encrypted local secret store (DPAPI via `Export-Clixml`) so keys are never embedded in scripts.
+
 Environment variables:
 
 - `REPAIR_NESSUS_AGENT_KEY`
@@ -37,13 +37,39 @@ Environment variables:
 - `REPAIR_NESSUS_AGENT_WORKDIR`
 - `REPAIR_NESSUS_AGENT_LOG_PATH`
 - `REPAIR_NESSUS_AGENT_INSTALLER_SEARCH_PATHS`
+- `TENABLE_ACCESS_KEY`
+- `TENABLE_SECRET_KEY`
 
 Local config file:
 
 1. Copy `Restore-NessusAgent.local.psd1.example` to `Restore-NessusAgent.local.psd1`
 2. Fill in your environment-specific values
 
-Environment variables take precedence over the local config file.
+Secure secret store (recommended):
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+
+# Prompts securely; value is stored encrypted for your current Windows user profile.
+Set-NessusAgentSecret -NessusKey (Read-Host 'Nessus linking key' -AsSecureString)
+
+# Optional second secret in the same encrypted file.
+Set-NessusAgentSecret -CustomerUuid (Read-Host 'Customer UUID' -AsSecureString)
+Set-NessusAgentSecret -TenableAccessKey (Read-Host 'Tenable access key' -AsSecureString)
+Set-NessusAgentSecret -TenableSecretKey (Read-Host 'Tenable secret key' -AsSecureString)
+
+# Remove one secret or all secrets.
+Remove-NessusAgentSecret -NessusKey
+Remove-NessusAgentSecret -TenableAccessKey -TenableSecretKey
+Remove-NessusAgentSecret -All
+```
+
+Configuration precedence is:
+
+1. Environment variables
+2. Encrypted secret store
+3. `Restore-NessusAgent.local.psd1`
+4. Built-in defaults
 
 ## Usage
 
@@ -74,14 +100,6 @@ ManageEngine-style JSON output:
 pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -Key '<manageengine-passed-key>' -Group 'Windows Servers' -Json
 ```
 
-Optional post-link convergence retry knobs:
-
-```powershell
-Restore-NessusAgent -Relink -CsvPath .\Tests\agents.csv -LinkStatusRetryCount 6 -LinkStatusRetryDelaySeconds 10
-```
-
-Use these when a freshly linked agent reports `connection has not been attempted` for a short period after relink.
-
 Other flat output formats:
 
 ```powershell
@@ -110,51 +128,14 @@ Import-Module .\Restore-NessusAgent.psd1 -Force
 Get-NessusAgentConfiguration
 ```
 
-## Uninstall Workflow
+The configuration output includes:
 
-Preflight safety checks only (no uninstall):
-
-```powershell
-Import-Module .\Restore-NessusAgent.psd1 -Force
-Uninstall-NessusAgent -AllowUninstall -PreflightOnly -Confirm:$false
-```
-
-Actual uninstall (Nessus Agent only, guarded by product identity checks):
-
-```powershell
-Import-Module .\Restore-NessusAgent.psd1 -Force
-Uninstall-NessusAgent -AllowUninstall -Confirm:$false
-```
-
-The command validates product code format, uninstall registry identity, and running process state before calling `msiexec`.
-
-## Export-TIOAgents Workflow
-
-Fast inventory export (CSV with group column):
-
-```powershell
-pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -Mode Fast
-```
-
-Detail export with full-fidelity JSONL:
-
-```powershell
-pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -Mode Detail
-```
-
-Detail test sample run:
-
-```powershell
-pwsh -File .\Public\Export-TIOAgents.ps1 -ScannerId 1 -OutDir C:\Temp\Tenable -DetailTest -SampleSize 10
-```
-
-Then run repair using exported CSV:
-
-```powershell
-pwsh -File .\Scripts\Invoke-RestoreNessusAgent.ps1 -CsvPath C:\Temp\Tenable\TioAgentInventory_Fast_Scanner1.csv -Confirm:$false
-```
-
-If a matched row has an empty `Groups` value, CSV group resolution will fail by design. In that case pass `-Group` explicitly or use `-GroupOverride`.
+- `SecretStorePath`
+- `SecretStorePresent`
+- `HasNessusKey`
+- `HasCustomerUuid`
+- `HasTenableAccessKey`
+- `HasTenableSecretKey`
 
 ## Testing
 
@@ -170,15 +151,127 @@ Run the Pester suite:
 pwsh -File .\Tests\Invoke-RestoreNessusAgentPester.ps1
 ```
 
-Run all validations directly:
+GitHub Actions is configured to run the Pester suite on pushes to `main` and on pull requests.
+
+## Workflow Validation
+
+Use these steps to validate the operator workflow on a real endpoint.
+
+### 1. Read-only healthcheck
+
+This verifies current health without changing anything:
 
 ```powershell
-Invoke-Pester -Path .\Tests -PassThru
-.\Tests\Invoke-RestoreNessusAgentHarness.ps1
-.\Tests\Invoke-RestoreNessusAgentTagHarness.ps1
+$result = .\Scripts\Invoke-RestoreNessusAgent.ps1 -Json -Relink:$false | ConvertFrom-Json
+"EXIT=$LASTEXITCODE"
+"OUTCOME=$($result.outcome)"
+"AFTER=$($result.afterStatus)"
+$result.summary
+$result.errors
+$result.warnings
 ```
 
-GitHub Actions is configured to run the Pester suite on pushes to `main` and on pull requests.
+Expected healthy result:
+
+- `EXIT=0`
+- `AFTER=OK`
+- summary similar to `healthy agent: no change`
+
+### 2. Full live workflow
+
+This is the destructive end-to-end test: uninstall, download or stage install media, reinstall, relink, then verify health.
+
+#### 2a. Uninstall the agent
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+Uninstall-NessusAgent -AllowUninstall -Reason LiveWorkflowTest -Confirm:$false
+```
+
+Expected result:
+
+- `Uninstalled = True`
+- `DetailedResult = uninstall completed successfully`
+
+#### 2b. Download the installer if needed
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+$installer = Get-NessusAgentInstaller -ForceDownload
+$installer | Format-List
+```
+
+Expected result:
+
+- installer path is returned
+- download source is populated when a fresh download occurs
+
+#### 2c. Install the agent
+
+```powershell
+Import-Module .\Restore-NessusAgent.psd1 -Force
+Install-NessusAgent -Path $installer.Path
+```
+
+Expected result:
+
+- `Installed = True`
+- `DetailedResult = install completed successfully`
+
+#### 2d. Relink the agent
+
+Set the linking key in the current terminal only, then run the operator script with an explicit group:
+
+```powershell
+$env:REPAIR_NESSUS_AGENT_KEY = 'YOUR_LINKING_KEY'
+$result = .\Scripts\Invoke-RestoreNessusAgent.ps1 -Json -Group 'SCPM' | ConvertFrom-Json
+"EXIT=$LASTEXITCODE"
+"OUTCOME=$($result.outcome)"
+"AFTER=$($result.afterStatus)"
+$result.errors
+$result.warnings
+Remove-Item Env:REPAIR_NESSUS_AGENT_KEY -ErrorAction SilentlyContinue
+```
+
+Expected successful relink result:
+
+- `EXIT=0`
+- `OUTCOME=Changed`
+- `AFTER=OK`
+
+Notes:
+
+- Passing `-Group 'SCPM'` avoids dependence on CSV group resolution during live validation.
+- A remote log share warning such as `Failed to upload log ... The network name cannot be found.` is non-fatal if the final status is still `AFTER=OK`.
+- If relink fails with `empty response from controller`, verify the linking key is current.
+
+#### 2e. Confirm steady-state health after relink
+
+```powershell
+$health = .\Scripts\Invoke-RestoreNessusAgent.ps1 -Json -Relink:$false | ConvertFrom-Json
+"EXIT=$LASTEXITCODE"
+"AFTER=$($health.afterStatus)"
+"SUMMARY=$($health.summary)"
+$health.before | ConvertTo-Json -Depth 5
+$health.after | ConvertTo-Json -Depth 5
+```
+
+Expected result:
+
+- `EXIT=0`
+- `AFTER=OK`
+- summary similar to `healthy agent: no change`
+- both `before` and `after` health snapshots are present in JSON output
+
+### 3. Verified live result
+
+This workflow was validated successfully on 2026-04-14:
+
+- uninstall succeeded
+- installer download succeeded
+- install succeeded
+- relink succeeded after using a current linking key
+- post-relink healthcheck succeeded with `EXIT=0` and `AFTER=OK`
 
 ## License
 

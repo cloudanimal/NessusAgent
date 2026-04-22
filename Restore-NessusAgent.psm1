@@ -21,6 +21,8 @@ Export-ModuleMember -Function @(
     'Get-NessusAgentHealth',
     'Get-NessusAgentInstaller',
     'Get-EpcRegistry',
+    'Set-NessusAgentSecret',
+    'Remove-NessusAgentSecret',
     'Get-NessusAgentStatus',
     'Get-NessusAgentConfiguration',
     'Install-NessusAgent',

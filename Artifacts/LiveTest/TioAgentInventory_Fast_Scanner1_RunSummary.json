@@ -1,0 +1,14 @@
+﻿{
+    "Mode":  "Fast",
+    "ScannerId":  "1",
+    "TotalAgents":  11716,
+    "DurationSeconds":  29,
+    "EnrichedCount":  0,
+    "Skipped404Count":  0,
+    "ExportedRawJsonl":  null,
+    "StartedAt":  "2026-04-21T19:01:09",
+    "EndedAt":  "2026-04-21T19:01:37",
+    "SampleSize":  null,
+    "ExportedCsv":  "C:\\SCPM\\MODULES\\NessusAgent\\Artifacts\\LiveTest\\TioAgentInventory_Fast_Scanner1.csv",
+    "DetailTest":  false
+}
