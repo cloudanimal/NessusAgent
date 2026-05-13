@@ -215,9 +215,22 @@ function Write-FormattedResult {
     }
 }
 
+function Test-IsElevatedSession {
+    [CmdletBinding()]
+    param()
+
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 try {
     $outputMode = $PSCmdlet.ParameterSetName
     $runStart = Get-Date
+
+    if (-not (Test-IsElevatedSession)) {
+        throw 'Preflight failed: Invoke-RestoreNessusAgent.ps1 must run in an elevated PowerShell session (Run as Administrator). nessuscli requires administrator privileges.'
+    }
 
     $configuration = Get-NessusAgentConfiguration -IncludeSecrets
     $resolvedComputerName = $ComputerName
@@ -384,6 +397,7 @@ catch {
     $flatErrorResult = [pscustomobject]@{
         ComputerName = $ComputerName
         AgentName = $AgentName
+        Message = $_.Exception.Message
         Installed = $false
         Changed = $null
         Outcome = 'Failed'

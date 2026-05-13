@@ -16,6 +16,8 @@ function Get-NessusAgentStatus {
 
     $data = [ordered]@{
         Running = $null
+        SafeMode = $null
+        PluginsLoaded = $null
         LinkedTo = $null
         LinkStatus = $null
         Proxy = $null
@@ -28,10 +30,10 @@ function Get-NessusAgentStatus {
         LastConnectText = $null
         LastConnectionAttempt = $null
         LastConnectionAttemptText = $null
+        LastSuccessfulConnection = $null
         JobsPending = $null
         AgentStatus = $null
         StatusExitCode = $exitCode
-        RawOutput = ($rawLines -join [Environment]::NewLine)
     }
 
     foreach ($line in $rawLines) {
@@ -66,6 +68,15 @@ function Get-NessusAgentStatus {
         switch ($key) {
             'Running' {
                 $data.Running = $value
+            }
+            'Safe Mode' {
+                $data.SafeMode = $value
+            }
+            'Plugins loaded' {
+                $data.PluginsLoaded = $value
+            }
+            'Last successful connection with controller' {
+                $data.LastSuccessfulConnection = $value
             }
             'Linked to' {
                 $data.LinkedTo = $value

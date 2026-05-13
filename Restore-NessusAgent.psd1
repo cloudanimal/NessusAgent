@@ -8,6 +8,8 @@
     PowerShellVersion = '5.1'
     FunctionsToExport = @(
         'Get-MeDistributionServer',
+        'Get-TioAgentBySystem',
+        'Get-TioAgentGroupBySystem',
         'Get-NessusAgentHealth',
         'Get-NessusAgentInstaller',
         'Get-EpcRegistry',

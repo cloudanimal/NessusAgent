@@ -18,6 +18,8 @@ foreach ($path in @($privatePath, $publicPath)) {
 
 Export-ModuleMember -Function @(
     'Get-MeDistributionServer',
+    'Get-TioAgentBySystem',
+    'Get-TioAgentGroupBySystem',
     'Get-NessusAgentHealth',
     'Get-NessusAgentInstaller',
     'Get-EpcRegistry',

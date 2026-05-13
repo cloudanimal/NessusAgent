@@ -362,11 +362,14 @@ function Export-PartialArtifacts {
     # Human-friendly partial report CSV: use flattened format in Detail mode
     $partialCsv = Join-Path $OutDir ("{0}_{1}_PARTIAL_REPORT.csv" -f $BaseName, $ts)
     $exportFunction = if ($IsDetailMode) { 'ConvertTo-FlattenedTioExportRecord' } else { 'ConvertTo-TioExportRecord' }
-    $Agents |
-        ForEach-Object { & $exportFunction -Agent $_ -AgentToGroups $AgentToGroups } |
-        Export-Csv -Path $partialCsv -NoTypeInformation -Encoding UTF8
-
-    Write-Warning "Partial REPORT export written: $partialCsv"
+    try {
+        $Agents |
+            ForEach-Object { & $exportFunction -Agent $_ -AgentToGroups $AgentToGroups } |
+            Export-Csv -Path $partialCsv -NoTypeInformation -Encoding UTF8
+        Write-Warning "Partial REPORT export written: $partialCsv"
+    } catch {
+        Write-Warning "Partial REPORT CSV failed (non-fatal): $($_.Exception.Message)"
+    }
 }
 
 function Convert-FromUnixSecondsSafe {
@@ -728,6 +731,10 @@ try {
     Write-Host "Run summary written: $summaryJs"
 }
 catch {
+    # Log the original error BEFORE any cleanup so it is always visible
+    Write-Warning "Export failed: $($_.Exception.Message)"
+    Write-Warning "At: $($_.InvocationInfo.PositionMessage)"
+
     # Optional nice-to-have: produce partial JSONL + partial report CSV on crash
     Export-PartialArtifacts -OutDir $OutDir -BaseName $baseName -Agents $agents -AgentToGroups $agentToGroups -IsDetailMode $IsDetailMode
 
